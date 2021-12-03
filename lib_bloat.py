@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
 
+# USAGE: python3 lib_bloat.py <object/archive> <object/archive> ... <linked wasm>
+
+# NOTE: For this to work reliably, the linked wasm file needs a name section,
+# with mangled names. That means linking with -g or --profiling-funcs, and with
+# -Wl,--no-demangle
+
+# TODO: This captures weak symbols as part of the library. This means that the
+# corresponding symbol will be attributed to the library, when it really should
+# probably be treated specially (because e.g. removing the CU from the build
+# will not cause the weak symbols to disappear from the final output unless
+# that library was the only one defining the symbol)
+
 import os
 from pathlib import Path
 import subprocess
@@ -9,10 +21,11 @@ LLVM_DIR = Path('/s/emr/install/bin')
 BLOATY_DIR = Path.home() / 'software' / 'bloaty'
 
 def run_tool(cmd):
+    print(' '.join([str(p) for p in cmd]))
     result = subprocess.run(cmd, capture_output=True)
     if result.returncode:
         print(f'Command Failed:')
-        print(''.join([str(p) for p in cmd]))
+        print(' '.join([str(p) for p in cmd]))
         print(result.stdout.decode())
         print(result.stderr.decode())
         raise subprocess.CalledProcessError(result.returncode, cmd)
@@ -27,7 +40,9 @@ def GetLibFunctions(libs):
             try:
                 addr, symtype, name = line.split()
                 #print(f'type {symtype}, name {name}')
-                if symtype.lower() == 't': # A global or local defined function sym
+                if (symtype.lower() == 't' or # A global or local defined function sym
+                    symtype.lower() == 'w'): # A global or local weak symbol
+                    # TODO: weak symbols?
                     func_names.add(name)
             except ValueError: # fewer than 3 tokens
                 continue
@@ -36,7 +51,8 @@ def GetLibFunctions(libs):
 
 def GetFuncSizes(wasm):
     bloaty = BLOATY_DIR / 'bloaty'
-    bloaty_output = run_tool([bloaty, '-d', 'symbols', '-n', '0', '--csv', wasm])
+    bloaty_output = run_tool([bloaty, '-d', 'symbols', '-n', '0',
+                              '--demangle=none', '--csv', wasm])
     func_sizes = {}
     for line in bloaty_output.split('\n'):
         if (line.startswith('[section') or line.endswith('filesize') or
