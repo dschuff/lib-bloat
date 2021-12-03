@@ -6,11 +6,10 @@
 # with mangled names. That means linking with -g or --profiling-funcs, and with
 # -Wl,--no-demangle
 
-# TODO: This captures weak symbols as part of the library. This means that the
-# corresponding symbol will be attributed to the library, when it really should
-# probably be treated specially (because e.g. removing the CU from the build
-# will not cause the weak symbols to disappear from the final output unless
-# that library was the only one defining the symbol)
+# This script tracks weak symbols separately from defined functions. This is
+# weak symbols are not attributable to only one object file, and removing
+# the entire object from the link would not remove the weak symbol from the
+# final linked output unless that object is the only one defining the symbol.
 
 import os
 from pathlib import Path
